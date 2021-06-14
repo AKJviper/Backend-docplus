@@ -1,6 +1,6 @@
 from django.forms import fields
 from rest_framework import serializers
-from DocPlus.models import AddRequest, AppUser, FaqBlog, Prescription, Profile, UserDoctor, Patholab, Hospital, Collector, Transaction
+from DocPlus.models import AddRequest, Ambulance, AppUser, FaqBlog,ContactForm, Prescription, Profile, UserDoctor, Patholab, Hospital, Collector, Transaction
 from django.http import HttpResponse
 
 from rest_framework_jwt.settings import api_settings
@@ -145,7 +145,7 @@ class HospitalSerializer(serializers.ModelSerializer):
 class AmbulanceSerializer(serializers.ModelSerializer):
 
     class Meta:
-        model = Hospital
+        model = Ambulance
         fields = '__all__'
         lookup_field = 'slug'
 
@@ -164,7 +164,7 @@ class CollectorSerializer(serializers.ModelSerializer):
         lookup_field = 'slug'
 
 class TransactionSerializer(serializers.ModelSerializer):
-
+    
     class Meta:
         model = Transaction
         fields = '__all__'
@@ -188,6 +188,12 @@ class FaqBlogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FaqBlog
+        fields = '__all__'
+
+class ContactSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = ContactForm
         fields = '__all__'
         
 

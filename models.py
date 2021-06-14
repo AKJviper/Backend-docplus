@@ -83,7 +83,7 @@ def save_user_profile(sender, instance, **kwargs):
 class AppUser(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True, default="")
     slug = models.SlugField(max_length = 250, null = True, blank = True)
-    Name = models.CharField(max_length=50, error_messages={'Incomplete':"Enter your Full Name"}, default="")
+    name = models.CharField(max_length=50, error_messages={'Incomplete':"Enter your Full Name"}, default="")
     phone = models.CharField(max_length=10, error_messages={'incomplete': 'Enter a phone Number.'}, default="")
     dob= models.CharField(max_length=12, default="")
     state = models.CharField(max_length=50, default="")
@@ -95,11 +95,11 @@ class AppUser(models.Model):
     friends = models.ManyToManyField(User , blank=True, related_name='users_doctor', default="")
 
     def save(self, *args, **kwargs):
-        self.slug = slugify(self.user)
+        self.slug = (self.user.username)
         super(AppUser, self).save(*args, **kwargs)
          
     def __str__(self):
-                return "%s %s" % (str(self.pk), self.Name)
+                return "%s %s" % (str(self.pk), self.name)
 
 
     
@@ -117,7 +117,7 @@ class AppUser(models.Model):
 
 class UserDoctor(models.Model):
     userdoc = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True, default="")
-    Name = models.CharField(max_length=50, error_messages={'Incomplete':"Enter your Full Name"}, default="")
+    name = models.CharField(max_length=50, error_messages={'Incomplete':"Enter your Full Name"}, default="")
     slug = models.SlugField(max_length = 250, null = True, blank = True)
     phone = models.CharField(max_length=10, error_messages={'incomplete': 'Enter a phone Number.'}, default="")
     dob= models.CharField(max_length=12, default="")
@@ -141,33 +141,33 @@ class UserDoctor(models.Model):
     permissions = ("is_doctor", "is a doctor")
 
     def save(self, *args, **kwargs):
-        self.slug = slugify(self.userdoc)
+        self.slug = (self.userdoc.username)
         super(UserDoctor, self).save(*args, **kwargs)
         
     def __str__(self):
-        return "%s %s" % (str(self.pk), self.Name)
+        return "%s %s" % (str(self.pk), self.name)
 
 class Ambulance(models.Model):
     useramb = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True, default="")
-    Name = models.CharField(max_length=50, error_messages={'Incomplete':"Enter your Full Name"}, default="")
+    name = models.CharField(max_length=50, error_messages={'Incomplete':"Enter your Full Name"}, default="")
     slug = models.SlugField(max_length = 250, null = True, blank = True)
     phone = models.CharField(max_length=10, error_messages={'incomplete': 'Enter a phone Number.'}, default="")
     vehicle_reg= models.CharField(max_length=12, default="")
     state = models.CharField(max_length=50, default="")
     city = models.CharField(max_length=50, default="")
     address = models.TextField(max_length=400, default="")
-    profileImg = models.ImageField(null=True, blank=True, upload_to="images/ambulance")
+    profileImg = models.ImageField(null=True, blank=True, upload_to="images/ambulance", default="")
     zip_code = models.CharField(max_length=6,error_messages={'incomplete': 'Enter a ZIP code.'}, default="")
     owner_name= models.TextField(blank=True, null=True,  default="")
-    wic_charge = models.IntegerField(default=0, null=True)
-    availability = models.BooleanField(default="")
+    wic_charge = models.IntegerField(null=True, default=0, blank=True)
+    availability = models.BooleanField(default=False, blank=True, null=True)
 
     def save(self, *args, **kwargs):
-        self.slug = slugify(self.userdoc)
+        self.slug = self.useramb.username
         super(Ambulance, self).save(*args, **kwargs)
         
     def __str__(self):
-        return "%s %s" % (str(self.Name), self.vehicle_reg)
+        return "%s %s" % (str(self.name), self.vehicle_reg)
 
 # class PatDoctor(models.Model):
 #     first  = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='PatDoc_first')
@@ -224,7 +224,7 @@ class Hospital(models.Model):
        ordering = ('-id', )
 
     def save(self, *args, **kwargs):
-        self.slug = slugify(self.userhospital)
+        self.slug = self.userhospital.username
         super(Hospital, self).save(*args, **kwargs)
 
     def __str__(self):
@@ -249,7 +249,7 @@ class Patholab(models.Model):
        ordering = ('-id', )
     
     def save(self, *args, **kwargs):
-        self.slug = slugify(self.userpatho)
+        self.slug = self.userpatho.username
         super(Patholab, self).save(*args, **kwargs)
 
     def __str__(self):
@@ -276,7 +276,7 @@ class Collector(models.Model):
        ordering = ('-id', )
     
     def save(self, *args, **kwargs):
-        self.slug = slugify(self.usercollector)
+        self.slug = self.usercollector.username
         super(Collector, self).save(*args, **kwargs)
 
     def __str__(self):
@@ -293,26 +293,29 @@ class Transaction(models.Model):
     receiver = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name='receiver_name')
     receiveruser = models.CharField(max_length=30, blank=True)
     receivername = models.CharField(max_length=50, blank=True)
+    patientname = models.CharField(max_length=50, blank=True)
+    puid = models.CharField(max_length=25, blank=True)
     amount = models.IntegerField(default=0, blank=True)
     mode = models.CharField(max_length=50, blank=True)
     transactionid = models.CharField(max_length=50)
     date = models.DateField(auto_now=True)
+    time = models.TimeField(auto_now=True, blank=True)
+    isPaid = models.BooleanField(default=False)
     
 
     class Meta:
        ordering = ('-date', )
     def save(self, *args, **kwargs):
-        self.slug = slugify(self.generatedid)
-        if not self.id:
-            self.payeename = self.payee.first_name +" "+ self.payee.last_name
-            self.payeeuser = self.payee.username
-            self.receivername = self.receiver.first_name +" "+ self.receiver.last_name
-            self.receiveruser = self.receiver.username
+        self.slug = self.generatedid 
+        self.payeename = self.payee.first_name +" "+ self.payee.last_name
+        self.payeeuser = self.payee.username
+        self.receivername = self.receiver.first_name +" "+ self.receiver.last_name
+        self.receiveruser = self.receiver.username
         super(Transaction, self).save(*args, **kwargs)
 
     
     def __str__(self):
-       return "%s %s" % (self.payee, self.generatedid)
+       return "%s %s" % (self.payee, self.receiver)
     # trans_user = models.ForeignKey(AppUser, on_delete=DO_NOTHING, related_name="user_transaction")
     # trans_doctor = models.ForeignKey(UserDoctor, on_delete=DO_NOTHING, related_name="doctor_transaction")
     # trans_patho = models.ForeignKey(Patholab, on_delete=DO_NOTHING, related_name="transaction_patho")
@@ -370,6 +373,14 @@ class FaqBlog(models.Model):
             self.byusername = self.byuser.username
             self.byfullname = self.byuser.first_name +" "+ self.byuser.last_name
         super(FaqBlog, self).save(*args, **kwargs)
+
+class ContactForm(models.Model):
+    name = models.CharField(max_length=30, default="")
+    email = models.CharField(max_length=30, default="")
+    msgtype = models.CharField(max_length=20, default="")
+    message = models.TextField(default="")
+    date = models.DateField(auto_now=True)
+
 # class Contact(models.Model):
 #     user = models.ForeignKey(User, related_name='friends')
 #     friends = models.ManyToManyField('self', blank=True)

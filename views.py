@@ -4,33 +4,23 @@ from django.db import models, reset_queries
 from rest_framework.views import APIView
 from DocPlus.models import *
 from django.shortcuts import render, get_object_or_404
-from django.http import HttpResponse, Http404, HttpResponseForbidden, HttpResponseRedirect, response, JsonResponse
-from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.forms import forms
+from django.http import HttpResponse
 from django.shortcuts import render, redirect
-from django.contrib.auth.models import Permission, User
+from django.contrib.auth.models import  User
 from django.contrib.auth.decorators import login_required, permission_required
-from django.contrib.auth.forms import UserCreationForm, UsernameField
-from django.views.generic import DetailView, ListView
-from django.conf import settings
-from django.db.models import Q
-from datetime import datetime
 from django.db.models import Value as V
-from django.db.models.functions import Concat
-import jwt
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, parser_classes , permission_classes
-from rest_framework import status, permissions, parsers, filters
+from rest_framework import status, permissions, filters
 from .serializers import *
-from rest_framework import authentication , exceptions
 from rest_framework import viewsets
 from rest_framework.response import Response
 from .serializers import UserSerializer
 from django.contrib.auth.models import User
-from rest_framework.parsers import FileUploadParser, JSONParser
-from django.views.decorators.csrf import csrf_exempt
-
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from . import Checksum
+import os
 
 
 class UserList(APIView):
@@ -75,7 +65,7 @@ class DoctorList(ListCreateAPIView):
     queryset= UserDoctor.objects.all()
     serializer_class = UserDoctorSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ['userdoc__username', 'Name', 'city', 'state']
+    search_fields = [ 'name', 'city', 'state', 'address']
 
 class FriendList(ListCreateAPIView):
     queryset= AddRequest.objects.all()
@@ -111,7 +101,7 @@ class AppUserList(ListCreateAPIView):
     queryset= AppUser.objects.all()
     serializer_class = AppUserSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ['user', 'Name', 'slug']
+    search_fields = ['user', 'name', 'slug']
 
 class HospitalDetail(RetrieveUpdateAPIView):
     permission_classes = (permissions.IsAuthenticated,)
@@ -131,14 +121,14 @@ class AmbulanceList(ListCreateAPIView):
     queryset= Ambulance.objects.all()
     serializer_class = AmbulanceSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ['service_area','city', 'state']
+    search_fields = ['address','city', 'state']
 
 class HospitalList(ListCreateAPIView):
     permission_classes = (permissions.IsAuthenticated,)
     queryset= Hospital.objects.all()
     serializer_class = HospitalSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ['name', 'city', 'state']
+    search_fields = ['name', 'city', 'state', 'address']
 
 
 class PatholabList(ListCreateAPIView):
@@ -146,24 +136,26 @@ class PatholabList(ListCreateAPIView):
     queryset= Patholab.objects.all()
     serializer_class = PatholabSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ['name','city', 'state']
+    search_fields = ['name','city', 'state', 'address']
 
 class CollectorList(ListCreateAPIView):
     permission_classes = (permissions.IsAuthenticated,)
     queryset= Collector.objects.all()
     serializer_class = CollectorSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ['name', 'city', 'state']
+    search_fields = ['name', 'city']
 
 
-class TransactionList(RetrieveAPIView):
+class TransactionDetail(RetrieveAPIView):
     permission_classes = (permissions.IsAuthenticated,)
     queryset= Transaction.objects.all()
     serializer_class = TransactionSerializer
-    filter_backends = [filters.SearchFilter]
-    lookup_field = ['transactionid', 'payee', 'receiver', 'date']
-    search_fields = ['generateid','payee','receiver','transactionid','date']
-
+    lookup_field = 'generatedid'
+   
+    # def get_object(self):
+    #     transId = self.kwargs["transId"]
+    #     return get_object_or_404(Transaction, transactionid=transId)
+        
 class TransactionList(ListCreateAPIView):
     permission_classes = (permissions.IsAuthenticated,)
     queryset= Transaction.objects.all()
@@ -171,9 +163,7 @@ class TransactionList(ListCreateAPIView):
     filter_backends = [filters.SearchFilter]
     search_fields = ['generateid','payee','receiver','transactionid','date']
 
-    def get_object(self):
-        transId = self.kwargs["transId"]
-        return get_object_or_404(Transaction, transactionid=transId)
+    
 
 class AppUserDetail(RetrieveUpdateAPIView):
     permission_classes = (permissions.IsAuthenticated,)
@@ -214,6 +204,17 @@ class PrescriptionList(ListCreateAPIView):
     filter_backends = [filters.SearchFilter]
     search_fields = [ 'forusername', 'fromusername']
 
+class Contactlist(ListCreateAPIView):
+    permission_classes=[permissions.AllowAny]
+    queryset= ContactForm.objects.all()
+    serializer_class =ContactSerializer
+
+class Contactdetail(RetrieveAPIView):
+    permission_classes=[permissions.AllowAny]
+    queryset= ContactForm.objects.all()
+    serializer_class =ContactSerializer
+    lookup_field='date'
+
 @permission_classes([permissions.IsAuthenticated])
 @api_view(['GET'])
 def list_pres(request, user):
@@ -225,11 +226,20 @@ def list_pres(request, user):
         return Response(serializer.data)
 
 @permission_classes([permissions.IsAuthenticated])
-
 @api_view(['GET'])
 def user_transaction(request, user):
     if request.method == 'GET':
         data = Transaction.objects.filter(payee = user)
+
+        serializer = TransactionSerializer(data, context={'request': request}, many=True)
+
+        return Response(serializer.data)
+
+# @permission_classes([permissions.IsAuthenticated])
+@api_view(['GET'])
+def rcv_transaction(request, user):
+    if request.method == 'GET':
+        data = Transaction.objects.filter(receiveruser = user)
 
         serializer = TransactionSerializer(data, context={'request': request}, many=True)
 
@@ -334,28 +344,7 @@ def accept_request(request, sender_username):
     else:
         return HttpResponse('Request not Accepted')
 
-# @api_view(['POST'])
-# def mainUser_create(request):
-  
 
-#     if request.method == 'POST':
-#         serializer = UserSerializerWithToken(data=request.data)
-#         if serializer.is_valid():
-#             print(request.data)
-#             return Response(serializer.data, status=status.HTTP_201_CREATED)
-            
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-# def update_profile(request, user_id):
-#     user = User.objects.get(pk=user_id)
-#     user.profile.User_type = request.data.User_type
-#     user.save()
-    # elif request.method == 'PUT':
-    #     serializer = User(recData, data=request.data,context={'request': request}).data
-    #     if serializer.is_valid():
-    #         serializer.save()
-    #         return Response(status=status.HTTP_204_NO_CONTENT)
-    #     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 def userDelete(request):
     try:
@@ -398,434 +387,85 @@ def user_all(request):
             
         return Response(serializer.errors)
 
+
+
+# Create your views here.
+
+
+@api_view(['POST'])
+def start_payment(request):
+    # request.data is coming from frontend
    
+    print(request.data)
+    uid= request.data['payeeslug']
+    userp = User.objects.get(username=uid)
+    payee=userp
+    rcv = request.data['receiverslug']
+    usero = User.objects.get(username=rcv)
+    receiver= usero
+    puid = request.data['puid']
+    amount = request.data['amount']
+    mode = request.data['mode']
+
+    # we are saving an order instance (keeping isPaid=False)
+    order = Transaction.objects.create(payee=payee, receiver=receiver, amount=amount, puid=puid, mode=mode)
+
+    serializer = TransactionSerializer(order)
+    # we have to send the param_dict to the frontend
+    # these credentials will be passed to paytm order processor to verify the business account
+    param_dict = {
+        'MID': os.environ.get('MERCHANTID'),
+        'ORDER_ID': str(order.generatedid),
+        'TXN_AMOUNT': str(amount),
+        'CUST_ID': payee,
+        'INDUSTRY_TYPE_ID': 'Retail',
+        'WEBSITE': 'WEBSTAGING',
+        'CHANNEL_ID': 'WEB',
+        'CALLBACK_URL': 'http://127.0.0.1:8000/api/handlepayment/',
+        # this is the url of handlepayment function, paytm will send a POST request to the fuction associated with this CALLBACK_URL
+    }
+
+    # create new checksum (unique hashed string) using our merchant key with every paytm payment
+    param_dict['CHECKSUMHASH'] = Checksum.generate_checksum(param_dict, os.environ.get('MERCHANTKEY'))
+    # send the dictionary with all the credentials to the frontend
+    return Response({'param_dict': param_dict})
+
+
+@api_view(['POST'])
+def handlepayment(request):
+    checksum = ""
+    # the request.POST is coming from paytm
+    form = request.POST
+
+    response_dict = {}
+    order = None  # initialize the order varible with None
+
+    for i in form.keys():
+        response_dict[i] = form[i]
+        if i == 'CHECKSUMHASH':
+            # 'CHECKSUMHASH' is coming from paytm and we will assign it to checksum variable to verify our paymant
+            checksum = form[i]
+
+        if i == 'ORDERID':
+            # we will get an order with id==ORDERID to turn isPaid=True when payment is successful
+            order = Transaction.objects.get(id=form[i])
+
+    # we will verify the payment using our merchant key and the checksum that we are getting from Paytm request.POST
+    verify = Checksum.verify_checksum(response_dict, os.environ.get('MERCHANTKEY'), checksum)
+
+    if verify:
+        if response_dict['RESPCODE'] == '01':
+            # if the response code is 01 that means our transaction is successfull
+            print('order successful')
+            # after successfull payment we will make isPaid=True and will save the order
+            order.isPaid = True
+            order.save()
+            # we will render a template to display the payment status
+            return render(request, 'paytm/paymentstatus.html', {'response': response_dict})
+        else:
+            print('order was not successful because' + response_dict['RESPMSG'])
+            return render(request, 'paytm/paymentstatus.html', {'response': response_dict})
 
-    
-@parser_classes([MultiPartParser])
-@api_view(['GET', 'POST'])
-def user_detail(request, pk):
-    try:
-        user = User.objects.get(username=pk)
-    except User.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
 
-    if request.method == 'GET':
-        
-        data_res = AppUser.objects.filter(user__username=pk)
-        serializer = AppUserSerializer(data_res, context={'request': request}, many=True).data
-        return Response(serializer)
 
-
-
-
-
-   
-   
-#     elif request.method == 'POST':
-#         # print(request.data)
-#         serializer = AppUserSerializer(data=request.data)
-#         if serializer.is_valid():
-#             print(request.data)
-            
-#             serializer.save()
-#             return Response(AppUserSerializer.data,  status=status.HTTP_201_CREATED)
-            
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    # def get_object(self, request, pk):
-    #     user = get_object_or_404(User, id=pk)
-    #     obj, created  = AppUser.objects.get_or_create(
-    #             user=user)
-    #     if obj == None:
-    #         raise Http404
-    #     return obj
-
-    # permission_classes = (permissions.AllowAny,)
-    # def post(self, request, pk):
-        
-    #     if self.request.method == 'POST':
-    #         serializer = AppUserSerializer(data=request.data)
-    #         if serializer.is_valid():
-    #             serializer.save()
-    #             return Response(status=status.HTTP_201_CREATED)
-
-    #         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    
-        
-@api_view(['POST', 'PUT', 'FILES'])
-@permission_required('AppUser.can_update')
-def update_user(request, pk):
-    try:
-        recData = AppUser.objects.get(pk=pk)
-    except AppUser.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-    if request.method == 'PUT':
-        serializer = AppUserSerializer(recData, data=request.data,context={'request': request}).data
-        if serializer.is_valid():
-            serializer.save()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-@permission_classes([permissions.IsAuthenticated])
-@permission_required(['AppUser.can_delete'])
-@login_required
-@api_view(['DELETE'])
-def delete_user(request, pk):
-    try:
-        recData = AppUser.objects.get(pk=pk)
-    except AppUser.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-    
-    if request.method == 'DELETE':
-        recData.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-
-
-
-
-
-
-
-
-@permission_classes([permissions.AllowAny],)
-@api_view(['GET', 'POST'])   
-def doctor_list(request):
-    if request.method == 'GET':
-        res_data = UserDoctor.objects.all()
-
-        serializer = UserDoctorSerializer(res_data, context={'request': request}, many=True)
-
-        return Response(serializer.data)
-
-    elif request.method == 'POST':
-        serializer = UserDoctorSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(status=status.HTTP_201_CREATED)
-                
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-@login_required
-@permission_classes([permissions.AllowAny])
-@api_view(['GET', 'POST', 'PUT'])
-@parser_classes([MultiPartParser])
-def doctor_detail(request, pk):
-    try:
-        userdoc = User.objects.get(pk=pk)
-    except AppUser.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-
-    if request.method == 'GET':
-        data_res = UserDoctor.objects.filter(userdoc=userdoc)
-        serializer = UserDoctorSerializer(data_res, context={'request': request}, many=True).data
-        return Response(serializer)
-
-    elif request.method == 'PUT':
-        serializer = UserDoctor(data=request.data,context={'request': request}).data
-        if serializer.is_valid():
-            serializer.save()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        return Response(serializer.errors)
-
-
-@permission_required('UserDoctor.is_doctor')
-@parser_classes([MultiPartParser])
-@login_required
-def update_doctor(request, pk):
-    try:
-        recData = UserDoctor.objects.get(pk=pk)
-    except UserDoctor.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-    
-    if request.method == 'GET':
-        res_data = UserDoctor.objects.filter(pk="5")
-
-        serializer = UserDoctorSerializer(res_data, context={'request': request}, many=True).data
-
-        return Response(serializer)
-    
-    elif request.method == 'PUT':
-        serializer = UserDoctor(recData, data=request.data,context={'request': request}).data
-        if serializer.is_valid():
-            serializer.save()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    elif request.method == 'DELETE':
-        recData.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-# @api_view(['GET', 'POST'])
-# @login_required
-# def messages_list(request):
-#     if request.method == 'GET':
-#         data = Messages.objects.all()
-#         serializer = MessagesSerializer(data, context={'request': request}, many=True).data
-#         return Response(serializer.data)
-
-#     elif request.method == 'POST':
-#         serializer = MessagesSerializer(data=request.data)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(status=status.HTTP_201_CREATED)
-            
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-# @api_view(['GET', 'POST', 'PUT', 'DELETE'])
-# @login_required
-# def messages_detail(request, pk):
-#     try:
-#         recData = Messages.objects.get(pk=pk)
-#     except Messages.DoesNotExist:
-#         return Response(status=status.HTTP_404_NOT_FOUND)
-
-#     if request.method == 'GET':
-#         data_res = Messages.objects.filter(pk=pk)
-
-#         serializer = MessagesSerializer(data_res, context={'request': request}, many=True).data
-
-#         return Response(serializer)
-
-#     elif request.method == 'POST':
-#         serializer = MessagesSerializer(data=request.data)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(status=status.HTTP_201_CREATED)
-            
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-#     if request.method == 'PUT':
-#         serializer = Messages(recData, data=request.data,context={'request': request}).data
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(status=status.HTTP_204_NO_CONTENT)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-#     elif request.method == 'DELETE':
-#         recData.delete()
-#         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-
-
-
-# class IndexView(ListView):
-#     model=AppUser
-#     template_name='home.html'
-
-
-# class DoctorDetailView(DetailView):
-#     model =AppUser
-#     all_models_dict = {
-#         "template_name": "profile.html",
-#         "queryset": AppUser.objects.all(),
-#         "extra_context" : {"doctor_view" : UserDoctor.objects.all(),
-                           
-#                            }
-#     }
-
-
-# def search_doctors(request):
-#     if request.method == "POST":
-#         searched = request.POST.get('searched')
-#         doctors = User.objects.annotate(full_name=Concat('first_name', V(' '), 'last_name')).\
-#                 filter(full_name__icontains=searched).filter(appuser__user_type='D')
-#         return render(request, 'search_doctors.html', {'searched':searched,'doctors':doctors})
-#     else:
-#         return render(request, 'search_doctors.html', {})
-
-
-
-
-
-# def mylogin(request):
-#     if request.method == "POST":
-#         form = LoginForm(request.POST)
-#         if form.is_valid():
-#             username = form.cleaned_data.get('username')
-#             password = form.cleaned_data.get('password')
-
-#             # user = authenticate(username=username, password=password)
-#             # if user is not None:
-#             #     login(request, user)
-#             #     return render(request, template_name='dashboard.html')
-#             user = UserModel.objects.get(Q(username__iexact=username) | Q(email__iexact=username))
-#             userlog = authenticate(username=user, password=password)
-#             if userlog is not None:
-#                 login(request, user)
-#                 messages.info(request, f"You are now logged in as {username}.")
-#                 # return render(request, template_name='dashboard.html')
-#                 return response(user)
-#             else:
-#                 messages.error(request,"Fill the credentials correctly")
-#         else:
-#             messages.error(request,"Invalid username or password.")
-#     form = LoginForm()
-#     return render(request, 'login.html', context={"form":form})
-    
-# @login_required(login_url='login/')   
-# def userDetail(request):
-#     if request.method == 'POST':
-#         user_form = RegisterForm(request.POST)
-#         doctor_form = DoctorForm(request.POST)
-#         if user_form.is_valid() or doctor_form.is_valid():
-#             form1=user_form.save(commit=False)
-#             form1.recorded_by = request.user
-#             form2 = doctor_form.save(commit=False)
-#             form2.form1 = form1
-#             form1.save()
-#             form2.save()
-#             UserDoctor.User = request.user
-#             return redirect('dashboard')
-            
-#     else:
-#         user_form = RegisterForm()
-#         doctor_form = DoctorForm()
-
-#     context = {'register_form': user_form , 'doctor_form': doctor_form} 
-#     return render(request, 'detail_fill1.html', context)
-
-# @api_view(['GET'])
-# @login_required
-# def isDoctor(request):
-#     if(request.method == 'GET'):
-        
-#         # data_res = AppUser.objects.filter(city="Bhagalpur", )
-#         # serializer = AppUserSerializer(data_res, context={'request': request}, many=True).data
-#         data_res = AppUser.objects.filter(user_type="D")
-#         serializer = AppUserSerializer(data_res, context={'request': request}, many=True).data
-#         return Response(serializer)
-
-
-        
-
-
-
-
-def registration(request):
-    return HttpResponse("We are at registration page")
-
-def about(request):
-    return  HttpResponse("We are at about page")
-
-def search(request):
-    return  HttpResponse("We are at search page")
-
-
-def contact(request):
-    if request.method=="POST":
-        print(request)
-        name = request.POST.get('name', '')
-        email = request.POST.get('email', '')
-        phone = request.POST.get('phone', '')
-        message = request.POST.get('message', '')
-        print(name, email, phone, message)
-    return render(request, 'contact.html')
-
-
-def bookapp(request):
-    return  HttpResponse("We are at book appointment page")
-
-
-def consult(request):
-    return HttpResponse("We are at consult page")
-
-
-def presList(request):
-    return HttpResponse("We are at prescription list page")
-
-
-def header(request):
-    return render(request, 'header.html')
-    
-
-def dashboard(request):
-    return render(request, 'dashboard.html')
-
-
-
-# def user_register(request):
-#     if request.method == 'POST':
-#         form = SignUpForm(request.POST)
-#         if form.is_valid():
-#             form.save()
-#             username = form.cleaned_data.get('username')
-#             raw_password = form.cleaned_data.get('password1')
-#             user = authenticate(username=username, password=raw_password)
-#             login(request, user)
-#             return redirect('userinfo')
-#     else:
-#         form = SignUpForm()
-#     return render(request, 'signup.html', {'form': form})
-@permission_classes([permissions.AllowAny],)
-@api_view(['GET', 'POST'])   
-def hospital_list(request):
-    if request.method == 'GET':
-        res_data = Hospital.objects.all()
-
-        serializer = HospitalSerializer(res_data, context={'request': request}, many=True)
-
-        return Response(serializer.data)
-
-    elif request.method == 'POST':
-        serializer = HospitalSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(status=status.HTTP_201_CREATED)
-                
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-@login_required
-@permission_classes([permissions.IsAuthenticated])
-@api_view(['GET'])
-def hospital_detail(request, user):
-    try:
-        userhospital = User.objects.filter(username=user)
-    except User.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-
-    if request.method == 'GET':
-        data_res = Hospital.objects.filter(userhospital=userhospital)
-        serializer = HospitalSerializer(data_res, context={'request': request}, many=True).data
-        return Response(serializer)
-
-
-
-@permission_classes([permissions.AllowAny],)
-@api_view(['GET', 'POST'])   
-def patholab_list(request):
-    if request.method == 'GET':
-        res_data = Patholab.objects.all()
-
-        serializer = PatholabSerializer(res_data, context={'request': request}, many=True)
-
-        return Response(serializer.data)
-
-    elif request.method == 'POST':
-        serializer = PatholabSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(status=status.HTTP_201_CREATED)
-                
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@login_required
-@permission_classes([permissions.AllowAny])
-@api_view(['GET'])
-def patholab_detail(request, user):
-    try:
-        userpatho = User.objects.filter(username=user)
-    except User.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-
-    if request.method == 'GET':
-        data_res = Patholab.objects.filter(userhospital=userpatho)
-        serializer = UserDoctorSerializer(data_res, context={'request': request}, many=True).data
-        return Response(serializer)
 
